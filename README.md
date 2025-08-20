@@ -1,4 +1,16 @@
-# 🤖 TradeGenius – AI-Powered Decentralized Trading Bot
+<p align="center">
+    <img width="1536" height="1024" alt="TradeGenius Logo Design" src="https://github.com/user-attachments/assets/f84419e3-ccaa-4e02-8fcc-2fd5a1d30659" alt="TradeGenius Logo" width="250" />
+
+</p>
+
+<h1 align="center">🚀 TradeGenius</h1>
+
+<p align="center">
+  <em>AI-powered decentralized trading assistant leveraging <b>0G Inference SDK</b> and blockchain compute.</em>
+</p>
+
+---
+
 
 **Tagline:**
 “AI-driven, trustless, and transparent trading bot powered by 0G’s decentralized compute, storage, and smart contracts.”
