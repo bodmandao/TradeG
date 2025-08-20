@@ -75,7 +75,7 @@ flowchart TD
     end
 
     subgraph Backend[Bot Backend on 0G]
-        C -->|Query Inference| D[0G Compute (AI SDK)]
+        C -->|Query Inference| D[0G Compute SDK]
         D --> E[AI Model Predicts Market Signal]
         C -->|Store Logs| F[0G Storage]
         C -->|Execute Trade| G[0G Smart Contracts]
