@@ -1,4 +1,4 @@
-# 🤖 TradeG – AI-Powered Decentralized Trading Bot
+# 🤖 TradeGenius – AI-Powered Decentralized Trading Bot
 
 **Tagline:**
 “AI-driven, trustless, and transparent trading bot powered by 0G’s decentralized compute, storage, and smart contracts.”
@@ -19,9 +19,9 @@ This creates a **trust gap** between traders and the bots they rely on, making a
 
 ## 💡 Proposed Solution / What We’re Building
 
-We’re building **TradeG**, an **AI-powered, decentralized trading assistant** that lives entirely on the **0G ecosystem**.
+We’re building **TradeGenius**, an **AI-powered, decentralized trading assistant** that lives entirely on the **0G ecosystem**.
 
-Unlike centralized bots, TradeG leverages:
+Unlike centralized bots, TradeGenius leverages:
 
 * **0G Compute Network + Inference SDK** → AI price predictions, sentiment analysis, and trade signals are processed on decentralized compute nodes.
 * **0G Storage** → Training data and trading logs are stored in a verifiable, tamper-proof way.
@@ -94,7 +94,7 @@ flowchart TD
 
 ## 👨‍💻 How It Works (Step-by-Step User Flow)
 
-1. User connects wallet to TradeG dashboard.
+1. User connects wallet to TradeGenius dashboard.
 2. User selects AI strategy (e.g., “Risk Averse” bot).
 3. Market data is fetched & sent to **0G Compute Network**.
 4. AI model (deployed via **Inference SDK**) generates trade signals.
@@ -108,7 +108,7 @@ flowchart TD
 
 * **Retail Traders** → Access transparent, non-custodial AI bots.
 * **Crypto Communities** → DAO-run hedge funds powered by AI.
-* **DeFi Protocols** → Can integrate TradeG as a service for users.
+* **DeFi Protocols** → Can integrate TradeGenius as a service for users.
 * **Hackathon & Research** → Showcase decentralized AI trading on 0G infra.
 
 ---
