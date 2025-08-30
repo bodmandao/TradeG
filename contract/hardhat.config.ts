@@ -1,11 +1,25 @@
 import type { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import dotenv from 'dotenv'
+import "@openzeppelin/hardhat-upgrades";
 dotenv.config()
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.8.19",
+    compilers : [
+      {
+        version :"0.8.20"
+      },
+      {
+        version : "0.8.22"
+      },
+      {
+        version : "0.8.24"
+      },
+      {
+        version :"0.8.21"
+      }
+    ],
     settings: {
       evmVersion: "cancun",
       optimizer: {
