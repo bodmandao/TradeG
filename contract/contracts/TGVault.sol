@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
 import "./interfaces/ITGRouter.sol";
+import "./TGFeeManager.sol";
 
 contract TGVault is
     ERC4626,
@@ -17,6 +18,8 @@ contract TGVault is
     ReentrancyGuard,
     Pausable
 {
+    using Math for uint256;
+
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant EXECUTOR_ROLE = keccak256("EXECUTOR_ROLE");
     bytes32 public constant DEFAULT_ADMIN_ROLE_ = 0x00;
@@ -32,8 +35,6 @@ contract TGVault is
         uint256 amountIn,
         uint256 amountOut
     );
-
-    // NOTE: For simplicity this contract uses OZ ERC4626 implementation plus upgradeable patterns.
 
     function initialize(
         IERC20 asset_,
@@ -58,6 +59,12 @@ contract TGVault is
     function _authorizeUpgrade(
         address
     ) internal override onlyRole(DEFAULT_ADMIN_ROLE_) {}
+
+    // expose assetPerShare for fee manager
+    function assetPerShare() public view returns (uint256) {
+        if (totalSupply() == 0) return 1e18;
+        return (totalAssets() * 1e18) / totalSupply();
+    }
 
     // deposit / redeem overrides to add fee hooks
     function deposit(
@@ -108,12 +115,28 @@ contract TGVault is
         emit TradeExecuted(assetIn, assetOut, amountIn, out);
     }
 
+    // Called by fee manager to mint fee shares to collector
+    function mintFeeShares(uint256 feeShares, address collector) external {
+        require(msg.sender == feeManager, "ONLY_FEE_MANAGER");
+        _mint(collector, feeShares);
+    }
+
     function _maybeUpdateHWM() internal {
         if (totalSupply() == 0) return;
-        uint256 nav = (totalAssets() * 1e18) / totalSupply();
+        uint256 nav = assetPerShare();
         if (nav > _highWaterMark) {
             // call fee manager to accrue performance fee
-            // IGNORED: simple placeholder - real implementation must be gas-safe
+            try
+                TGFeeManager(feeManager).accruePerformanceFee(
+                    address(this),
+                    nav,
+                    _highWaterMark
+                )
+            {
+                // ignore revert; fee manager may opt to revert on edge-cases
+            } catch {
+                // continue without reverting execution
+            }
             _highWaterMark = nav;
         }
     }
@@ -126,6 +149,7 @@ contract TGVault is
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }
+
     function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
     }
