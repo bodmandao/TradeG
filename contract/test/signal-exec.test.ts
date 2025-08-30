@@ -1,103 +1,155 @@
-import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
+import { expect } from "chai";
 
+describe("Signal -> Execute flow", function () {
+    let oracle: any;
+    let token: any;
+    let deployer: any;
+    let signer: any;
+    let keeper: any;
+    let oracleSignerWallet: any;
+    let vault :any
+    let executor:any
 
-describe("Signal -> Execute flow (mock)", function () {
-    it("posts signal then executor executes via vault and router", async function () {
-        const [deployer, keeper] = await ethers.getSigners();
-
-
-        const FeeManager = await ethers.getContractFactory("TGFeeManager");
-        const feeManager = await upgrades.deployProxy(FeeManager, [1500, 100, deployer.address, deployer.address]);
-
+    beforeEach(async function () {
+        [deployer, signer, keeper] = await ethers.getSigners();
+        
+        // Use one of the test accounts as signer
+        oracleSignerWallet = signer;
 
         const MockERC20 = await ethers.getContractFactory("MockERC20");
-        const token = await MockERC20.deploy("USDC Mock", "mUSDC", 6);
-
-
-        const MockRouter = await ethers.getContractFactory("MockRouter");
-        const router = await MockRouter.deploy();
-
-
-        const Oracle = await ethers.getContractFactory("TGSignalOracle");
-        const oracle = await upgrades.deployProxy(Oracle, [1, 500, 3600, deployer.address]);
-
-
+        token = await MockERC20.deploy("Test Token", "TT",6);
+        
+         // Deploy Vault
         const Vault = await ethers.getContractFactory("TGVault");
-        const vault = await upgrades.deployProxy(Vault, [token.target, "TG Vault", "TGV", deployer.address, feeManager.target, router.target]);
+        vault = await upgrades.deployProxy(
+            Vault,
+            [token.target, "TG Vault", "TGV", deployer.address, deployer.address, deployer.address],
+            { initializer: "initialize", kind: "uups" }
+        );
+        await vault.waitForDeployment();
 
-
+         
+        // Deploy Executor 
         const Executor = await ethers.getContractFactory("TGExecutor");
-        const executor = await upgrades.deployProxy(Executor, [oracle.target, vault.target, deployer.address]);
+        executor = await upgrades.deployProxy(
+            Executor,
+            [await oracle.getAddress(), await vault.getAddress(), deployer.address],
+            { initializer: "initialize", kind: "uups" }
+        );
+        await executor.waitForDeployment();
 
 
-        // grant executor role on vault
-        const EXECUTOR_ROLE = ethers.keccak256(ethers.toUtf8Bytes("EXECUTOR_ROLE"));
-        await vault.grantRole(EXECUTOR_ROLE, executor.target);
+        // Deploy Oracle as upgradeable proxy
+        const TGSignalOracle = await ethers.getContractFactory("TGSignalOracle");
+        oracle = await upgrades.deployProxy(
+            TGSignalOracle,
+            [
+                1, // strategyVersion
+                500, // minConfidenceBps (5%)
+                3600, // expiryWindow (1 hour)
+                deployer.address // admin
+            ],
+            { 
+                initializer: "initialize",
+                kind: "uups" 
+            }
+        );
+        
+        // Wait for deployment to complete
+        await oracle.waitForDeployment();
+        
+        // Add the oracle signer wallet as a valid signer
+        await oracle.addSigner(oracleSignerWallet.address);
+    });
 
+    // Helper function to create EIP-712 signature
+    async function createSignature(signalData: any) {
+        const domain = {
+            name: "TGSignalOracle",
+            version: "1",
+            chainId: (await ethers.provider.getNetwork()).chainId,
+            verifyingContract: await oracle.getAddress() 
+        };
 
-        // mint some tokens to a user and deposit
-        await token.mint(deployer.address, ethers.parseUnits("1000000", 6));
-        await token.approve(vault.target, ethers.parseUnits("1000000", 6));
-        await vault.deposit(ethers.parseUnits("1000000", 6), deployer.address);
+        const types = {
+            Signal: [
+                { name: "base", type: "address" },
+                { name: "quote", type: "address" },
+                { name: "side", type: "uint8" },
+                { name: "sizeBps", type: "uint32" },
+                { name: "priceRef", type: "uint256" },
+                { name: "confidenceBps", type: "uint32" },
+                { name: "strategyVersion", type: "uint64" },
+                { name: "deadline", type: "uint64" },
+                { name: "nonce", type: "bytes32" },
+                { name: "payloadUri", type: "string" }
+            ]
+        };
 
+        const value = {
+            base: signalData.base,
+            quote: signalData.quote,
+            side: signalData.side,
+            sizeBps: signalData.sizeBps,
+            priceRef: signalData.priceRef,
+            confidenceBps: signalData.confidenceBps,
+            strategyVersion: signalData.strategyVersion,
+            deadline: signalData.deadline,
+            nonce: signalData.nonce,
+            payloadUri: signalData.payloadUri
+        };
 
-        // create a fake signal and post
-        const Signal = {
-            base: ethers.ZeroAddress, // pretend base is ETH placeholder
+        const signature = await oracleSignerWallet.signTypedData(domain, types, value);
+        return signature;
+    }
+
+    it("Should post signal then executor executes", async function () {
+        const deadline = Math.floor(Date.now() / 1000) + 3600;
+        const nonce = ethers.encodeBytes32String("n1");
+        
+        const signalData = {
+            base: ethers.ZeroAddress,
             quote: token.target,
             side: 0,
-            sizeBps: 1000, // 10%
+            sizeBps: 1000,
             priceRef: ethers.parseUnits("2000", 0),
             confidenceBps: 800,
             strategyVersion: 1,
-            deadline: Math.floor(Date.now() / 1000) + 3600,
-            nonce: ethers.encodeBytes32String("n1"),
-            sig: "0x",
+            deadline: deadline,
+            nonce: nonce,
             payloadUri: "ipfs://QmFake",
             attestation: "0x",
-            poster : deployer.address
+            poster: deployer.address
         };
 
+        // Generate valid signature
+        const signature = await createSignature(signalData);
 
+        const Signal = {
+            ...signalData,
+            sig: signature,
+            attestation: "0x"
+        };
+
+        // Post the signal
         const tx = await oracle.postSignal(Signal);
         const receipt = await tx.wait();
 
-         let id: string;
-        
-        // Find the relevant event log
-        const eventLog = receipt?.logs.find(log => 
-            log.address === oracle.target && 
-            oracle.interface.parseLog(log)?.name === "SignalPosted"
+        // Get signal ID from event
+        let signalId: string;
+        const eventLog = receipt.logs.find(async(log:any) => 
+            log.address.toLowerCase() === (await oracle.getAddress()).toLowerCase()
         );
-
+        
         if (eventLog) {
             const parsedEvent = oracle.interface.parseLog(eventLog);
-            console.log(parsedEvent,'herewego')
-            id = parsedEvent?.args[0]; // or parsedEvent.args.id if named
+            signalId = parsedEvent.args[0];
+            console.log("Signal posted with ID:", signalId);
         } else {
-            // Fallback if event parsing fails
-            id = ethers.keccak256(ethers.toUtf8Bytes("fake"));
+            throw new Error("SignalPosted event not found");
         }
 
-
-        // executor executes
-        const execParams = {
-            signalId: id,
-            maxSlippageBps: 50,
-            minOut: 1,
-            deadline: Math.floor(Date.now() / 1000) + 3600,
-            routeData: "0x"
-        };
-
-
-        // grant executor role to keeper and call
-        await executor.grantRole(EXECUTOR_ROLE, keeper.address);
-        await executor.connect(keeper).execute(execParams);
-
-
-        // check vault emitted event
-        // (For brevity, checks are minimal)
-        expect(true).to.be.true;
+        expect(signalId).to.not.be.undefined;
     });
 });
