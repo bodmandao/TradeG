@@ -29,16 +29,6 @@ describe("Signal -> Execute flow", function () {
         );
         await vault.waitForDeployment();
 
-         
-        // Deploy Executor 
-        const Executor = await ethers.getContractFactory("TGExecutor");
-        executor = await upgrades.deployProxy(
-            Executor,
-            [await oracle.getAddress(), await vault.getAddress(), deployer.address],
-            { initializer: "initialize", kind: "uups" }
-        );
-        await executor.waitForDeployment();
-
 
         // Deploy Oracle as upgradeable proxy
         const TGSignalOracle = await ethers.getContractFactory("TGSignalOracle");
@@ -61,6 +51,15 @@ describe("Signal -> Execute flow", function () {
         
         // Add the oracle signer wallet as a valid signer
         await oracle.addSigner(oracleSignerWallet.address);
+
+        // Deploy Executor 
+        const Executor = await ethers.getContractFactory("TGExecutor");
+        executor = await upgrades.deployProxy(
+            Executor,
+            [await oracle.getAddress(), await vault.getAddress(), deployer.address],
+            { initializer: "initialize", kind: "uups" }
+        );
+        await executor.waitForDeployment();
     });
 
     // Helper function to create EIP-712 signature
