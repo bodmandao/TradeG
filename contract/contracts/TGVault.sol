@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "./interfaces/ITGRouter.sol";
 import "./TGFeeManager.sol";
 
 contract TGVault is
     Initializable,
-    ERC20Upgradeable,
+    IERC20,
     ERC4626Upgradeable,
     UUPSUpgradeable,
     AccessControlUpgradeable,
@@ -36,14 +36,14 @@ contract TGVault is
     event TradeExecuted(address indexed assetIn, address indexed assetOut, uint256 amountIn, uint256 amountOut);
 
     /// @notice Initialize the upgradeable vault.
-    /// @param asset_ underlying asset (IERC20Upgradeable)
+    /// @param asset_ underlying asset 
     /// @param name_ ERC20 name
     /// @param symbol_ ERC20 symbol
     /// @param admin_ admin (governance)
     /// @param feeManager_ fee manager address
     /// @param router_ router/adapter address
     function initialize(
-        IERC20Upgradeable asset_,
+        IERC20 asset_,
         string memory name_,
         string memory symbol_,
         address admin_,
@@ -116,7 +116,7 @@ contract TGVault is
     ) external nonReentrant onlyRole(EXECUTOR_ROLE) whenNotPaused {
         require(!withdrawalOnly, "TRADING_HALTED");
         // vault approves router adapter to pull tokens (adapter should call router)
-        IERC20Upgradeable(assetIn).approve(address(router), amountIn);
+        IERC20(assetIn).approve(address(router), amountIn);
         uint256 out = router.swap(address(this), assetIn, assetOut, amountIn, minOut, deadline, routeData);
         _maybeUpdateHWM();
         emit TradeExecuted(assetIn, assetOut, amountIn, out);
