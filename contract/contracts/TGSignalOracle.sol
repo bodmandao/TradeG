@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 interface ITGSignalOracleInternal {
     struct Signal {
@@ -139,7 +140,7 @@ contract TGSignalOracle is
             )
         );
         bytes32 digest = keccak256(
-            abi.encodePacked("␙␁", DOMAIN_SEPARATOR, structHash)
+            abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash)
         );
         address signer = _recoverSigner(digest, s.sig);
         require(hasRole(ORACLE_SIGNER_ROLE, signer), "BAD_SIGNER");
