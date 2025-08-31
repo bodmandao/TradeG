@@ -1,25 +1,39 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "../interfaces/ITGRouter.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @notice Mock router for tests. Simulates a swap by transferring `amountIn` from vault to itself
-/// and then transferring the same amount back to the vault as `amountOut` (1:1). This allows tests
-/// to exercise vault executeTrade without integrating a real DEX.
-contract MockRouter is ITGRouter {
+contract MockRouter {
+    mapping(address => uint256) public mockSwapResults;
+    
+    function setMockSwapResult(address token, uint256 amount) external {
+        mockSwapResults[token] = amount;
+    }
+    
+    // Add this function to fund the router with tokens
+    function fundRouter(address token, uint256 amount) external {
+        IERC20(token).transferFrom(msg.sender, address(this), amount);
+    }
+    
     function swap(
-        address vault,
+        address, /* recipient */
         address assetIn,
         address assetOut,
         uint256 amountIn,
-        uint256 /*minOut*/,
-        uint256 /*deadline*/,
-        bytes calldata /*routeData*/
-    ) external pure returns (uint256) {
-        // In a real router, pool logic determines amounts. For mock, simply ensure vault approved this contract and then return amountIn.
-        // No transfers are required because the vault holds the tokens already and we assume router will pull them via allowance in production.
-        // For testing, return amountIn as amountOut (1:1).
-        return amountIn;
+        uint256, /* minOut */
+        uint256, /* deadline */
+        bytes calldata /* routeData */
+    ) external returns (uint256 amountOut) {
+        // Simulate successful swap
+        amountOut = mockSwapResults[assetOut];
+        require(amountOut > 0, "Mock: no swap result set");
+        
+        // Transfer input tokens from vault to router
+        IERC20(assetIn).transferFrom(msg.sender, address(this), amountIn);
+        
+        // Transfer output tokens from router to vault
+        IERC20(assetOut).transfer(msg.sender, amountOut);
+        
+        return amountOut;
     }
 }
