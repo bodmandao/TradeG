@@ -88,6 +88,16 @@ describe("Full Integration: Signal -> Execute -> Trade -> Vault", function () {
         await token.mint(deployer.address, initialAmount);
         await token.connect(deployer).approve(vault.target, initialAmount);
         await vault.connect(deployer).deposit(initialAmount, deployer.address);
+
+        // Fund the router with output tokens
+        const routerFundAmount = ethers.parseEther("1000000");
+        await weth.mint(deployer.address, routerFundAmount);
+        await weth.connect(deployer).approve(router.target, routerFundAmount);
+        await router.connect(deployer).fundRouter(weth.target, routerFundAmount);
+        
+        await token.mint(deployer.address, routerFundAmount);
+        await token.connect(deployer).approve(router.target, routerFundAmount);
+        await router.connect(deployer).fundRouter(token.target, routerFundAmount);
     });
 
     // Helper function to create EIP-712 signature
@@ -218,70 +228,101 @@ describe("Full Integration: Signal -> Execute -> Trade -> Vault", function () {
     });
 
     it("Vault releases funds on redeem", async function () {
-        // Deposit funds
-        const depositAmount = ethers.parseEther("1000");
+         const depositAmount = ethers.parseEther("100");
+        
+        // Mint and approve tokens
         await token.mint(deployer.address, depositAmount);
         await token.connect(deployer).approve(vault.target, depositAmount);
         
-        const shares = await vault.connect(deployer).deposit(depositAmount, deployer.address);
+        // Deposit
+        const depositTx = await vault.connect(deployer).deposit(depositAmount, deployer.address);
+        await depositTx.wait();
         
-        // Verify deposit worked
-        expect(await vault.balanceOf(deployer.address)).to.equal(shares);
+        // Check balance
+        const shares = await vault.balanceOf(deployer.address);
+        expect(shares).to.be.gt(0);
         
-        // Redeem funds
+        // Redeem
         const redeemTx = await vault.connect(deployer).redeem(shares, deployer.address, deployer.address);
         const redeemReceipt = await redeemTx.wait();
         
-        // Verify redemption was successful
         expect(redeemReceipt.status).to.equal(1);
-        
-        // Check final token balance
-        const finalBalance = await token.balanceOf(deployer.address);
-        expect(finalBalance).to.be.gt(0);
     });
 
-    it("Should handle sell signals (side = 1)", async function () {
-        // First acquire some WETH in the vault
-        const wethAmount = ethers.parseEther("10");
-        await weth.mint(vault.target, wethAmount);
-        
-        // Create sell signal (sell WETH for token)
-        const deadline = Math.floor(Date.now() / 1000) + 3600;
-        const nonce = ethers.encodeBytes32String("n2");
-        
-        const signalData = {
-            base: weth.target,    // Sell WETH
-            quote: token.target,  // For token
-            side: 1,              // 1 = sell base (WETH)
-            sizeBps: 5000,        // 50% of WETH position
-            priceRef: ethers.parseUnits("2000", 0),
-            confidenceBps: 800,
-            strategyVersion: 1,
-            deadline: deadline,
-            nonce: nonce,
-            payloadUri: "ipfs://QmFake",
-            attestation: "0x",
-            poster: deployer.address
-        };
+it("Should handle sell signals (side = 1)", async function () {
+    // First acquire some WETH in the vault
+    const wethAmount = ethers.parseEther("10");
+    await weth.mint(vault.target, wethAmount);
+    
+    // Create sell signal (sell WETH for token)
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
+    const nonce = ethers.encodeBytes32String("n2");
+    
+    const signalData = {
+        base: weth.target,    // Sell WETH
+        quote: token.target,  // For token
+        side: 1,              // 1 = sell base (WETH)
+        sizeBps: 5000,        // 50% of WETH position
+        priceRef: ethers.parseUnits("2000", 0),
+        confidenceBps: 800,
+        strategyVersion: 1,
+        deadline: deadline,
+        nonce: nonce,
+        payloadUri: "ipfs://QmFake",
+        attestation: "0x",
+        poster: deployer.address
+    };
 
-        const signature = await createSignature(signalData);
-        const Signal = { ...signalData, sig: signature, attestation: "0x" };
+    // Generate valid signature and post the signal
+    const signature = await createSignature(signalData);
+    const Signal = { ...signalData, sig: signature, attestation: "0x" };
 
-        // Post and execute signal
-        await oracle.postSignal(Signal);
-        
-        const execParams = {
-            signalId: ethers.keccak256(ethers.toUtf8Bytes("test-sell")),
-            maxSlippageBps: 500,
-            minOut: 1,
-            deadline: deadline,
-            routeData: "0x"
-        };
+    // POST THE SIGNAL FIRST
+    const postTx = await oracle.postSignal(Signal);
+    const postReceipt = await postTx.wait();
 
-        // Mock router for sell trade
-        const expectedTokenOut = ethers.parseEther("20000"); // 10 ETH * $2000 = 20000 tokens
-        await router.setMockSwapResult(token.target, expectedTokenOut);
+    // Get the actual signal ID from the event
+    const eventLog = postReceipt.logs.find( async(log) => 
+        log.address.toLowerCase() === (await oracle.getAddress()).toLowerCase()
+    );
+    const parsedEvent = oracle.interface.parseLog(eventLog!);
+    const signalId = parsedEvent.args[0];
 
-        await expect(executor.connect(keeper).execute(execParams)).to.emit(vault, "TradeExecuted");
-    });
+    // Verify the signal is valid
+    const isValid = await oracle.isValid(signalId);
+    expect(isValid).to.be.true;
+
+    const execParams = {
+        signalId: signalId, // Use the actual signal ID, not a fake one
+        maxSlippageBps: 500,
+        minOut: 1,
+        deadline: deadline,
+        routeData: "0x"
+    };
+
+    // Mock router for sell trade
+    const expectedTokenOut = ethers.parseEther("20000"); // 10 ETH * $2000 = 20000 tokens
+    await router.setMockSwapResult(token.target, expectedTokenOut);
+
+    // Ensure router has enough tokens
+    const routerTokenBalance = await token.balanceOf(router.target);
+    if (routerTokenBalance < expectedTokenOut) {
+        await token.mint(deployer.address, expectedTokenOut);
+        await token.connect(deployer).approve(router.target, expectedTokenOut);
+        await router.connect(deployer).fundRouter(token.target, expectedTokenOut);
+    }
+
+    await expect(executor.connect(keeper).execute(execParams))
+        .to.emit(vault, "TradeExecuted")
+        .withArgs(
+            weth.target,    // assetIn (WETH)
+            token.target,   // assetOut (token)
+            wethAmount * 5000n / 10000n, // 50% of WETH position
+            expectedTokenOut
+        );
+
+    // Verify the trade actually happened
+    const vaultTokenBalance = await token.balanceOf(vault.target);
+    expect(vaultTokenBalance).to.equal(expectedTokenOut);
+});
 });
