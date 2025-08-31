@@ -9,7 +9,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   // Deploy Mock Tokens
   await deploy("MockERC20", {
     from: deployer,
-    args: ["Test Token", "TT"],
+    args: ["Test Token", "TT",6],
     log: true,
   });
 

@@ -34,8 +34,17 @@ const config: HardhatUserConfig = {
       url: "https://evmrpc-testnet.0g.ai",
     chainId: 16601,
     accounts: [process.env.PRIVATE_KEY!]
-    }
-  }
+    },
+     hardhat: {
+        chainId: 31337,
+    },
+  },
+    namedAccounts: {
+      deployer: {
+          default: 0,
+          1: 0,
+      },
+  },
 };
 
 export default config;

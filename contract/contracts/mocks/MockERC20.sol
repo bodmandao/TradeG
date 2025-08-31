@@ -19,3 +19,24 @@ contract MockERC20 is ERC20 {
         _mint(to, amount);
     }
 }
+
+contract MockWETH is ERC20 {
+    constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
+    
+    function mint(address to, uint256 amount) public {
+        _mint(to, amount);
+    }
+    
+    function decimals() public pure override returns (uint8) {
+        return 18;
+    }
+
+    function deposit() public payable {
+        _mint(msg.sender, msg.value);
+    }
+    
+    function withdraw(uint256 amount) public {
+        _burn(msg.sender, amount);
+        payable(msg.sender).transfer(amount);
+    }
+}
